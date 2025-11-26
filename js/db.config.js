@@ -50,4 +50,9 @@ db.sequelize = sequelize;
 
 db.user = require("./user.model.js")(sequelize, Sequelize);
 
+const socialArmyModels = require("./socialArmy.model.js")(sequelize, Sequelize);
+db.SocialScore = socialArmyModels.SocialScore;
+db.SocialMessageScore = socialArmyModels.SocialMessageScore;
+db.SocialSubmission = socialArmyModels.SocialSubmission;
+
 module.exports = db;

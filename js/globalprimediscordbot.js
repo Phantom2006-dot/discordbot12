@@ -10,6 +10,7 @@ const {
 } = require("discord.js");
 const path = require("path");
 const tools = require("./tools.js");
+const socialArmy = require("./socialArmy.tools.js");
 tools.Log("Using config: " + JSON.stringify(tools.config));
 let config = tools.config;
 let prefix = config.prefix;
@@ -794,7 +795,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
       // .then(() => PostTandC(user))
       // .then(() => tools.DMUser(user, verificationMessage))
       // .then(m => {
-      // 	 m.react('👍');
+      //         m.react('👍');
       // });
     } else if (
       message.author?.bot &&
@@ -859,6 +860,8 @@ client.on("messageReactionAdd", async (reaction, user) => {
     ) {
       tools.AttemptToAddUserToSocialArmy(user);
     }
+    
+    await socialArmy.handleReactionAdd(reaction, user, client);
   }
   catch(e){
     tools.LogError(e);
@@ -878,7 +881,26 @@ async function PostTandC(user) {
 }
 
 client.on("messageReactionRemove", async (reaction, user) => {
-  const { message, emoji } = reaction;
+  try {
+    if (reaction.partial) {
+      await reaction.fetch();
+    }
+    if (reaction.message.partial) {
+      await reaction.message.fetch();
+    }
+    
+    await socialArmy.handleReactionRemove(reaction, user);
+  } catch (e) {
+    tools.LogError(e);
+  }
+});
+
+client.on("messageDelete", async (message) => {
+  try {
+    await socialArmy.handleMessageDelete(message);
+  } catch (e) {
+    tools.LogError(e);
+  }
 });
 
 client.on("guildMemberAdd", async (member) => {
@@ -894,6 +916,12 @@ client.on("guildMemberAdd", async (member) => {
 } catch(err){
   tools.LogError(err)
 }
+});
+
+tools.db.sequelize.sync({ alter: true }).then(() => {
+  tools.Log("Database synced (Social Army tables created/updated if needed)");
+}).catch(err => {
+  tools.LogError("Database sync error: " + err);
 });
 
 client
