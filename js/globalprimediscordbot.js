@@ -6,7 +6,10 @@ const {
   Collection,
   GatewayIntentBits,
   Partials,
-  EmbedBuilder
+  EmbedBuilder,
+  SlashCommandBuilder,
+  REST,
+  Routes
 } = require("discord.js");
 const path = require("path");
 const tools = require("./tools.js");
@@ -63,9 +66,60 @@ for (const file of commandFiles) {
   client.commands.set(command.name.toLowerCase(), command);
 }
 
-client.once("ready", () => {
+const slashCommands = [
+  new SlashCommandBuilder()
+    .setName('submit')
+    .setDescription('Submit your content to Social Army for judging')
+    .addStringOption(option =>
+      option.setName('url')
+        .setDescription('URL to your social media post (optional if attaching an image)')
+        .setRequired(false))
+    .addAttachmentOption(option =>
+      option.setName('image')
+        .setDescription('Attach an image/screenshot (optional if providing a URL)')
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('rankings')
+    .setDescription('View the monthly Social Army rankings'),
+  new SlashCommandBuilder()
+    .setName('social-stats')
+    .setDescription('View statistics for a user')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('The user to check stats for (leave empty for yourself)')
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('social-config')
+    .setDescription('View Social Army configuration'),
+  new SlashCommandBuilder()
+    .setName('social-reset')
+    .setDescription('[ADMIN] Reset monthly scores and announce winners'),
+  new SlashCommandBuilder()
+    .setName('social-export')
+    .setDescription('[ADMIN] Export top users')
+    .addIntegerOption(option =>
+      option.setName('limit')
+        .setDescription('Number of top users to export (default: 10)')
+        .setRequired(false))
+];
+
+client.once("ready", async () => {
   tools.Log(`${client.user.username} Ready!`);
   client.user.setActivity("blend in with the humans");
+  
+  try {
+    const rest = new REST({ version: '10' }).setToken(token);
+    console.log('Started refreshing application (/) commands...');
+    
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: slashCommands.map(cmd => cmd.toJSON()) }
+    );
+    
+    console.log('Successfully registered application (/) commands.');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
+  }
 });
 
 client.on("messageCreate", async (message) => {
@@ -916,6 +970,227 @@ client.on("guildMemberAdd", async (member) => {
 } catch(err){
   tools.LogError(err)
 }
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  
+  const { commandName } = interaction;
+  
+  try {
+    if (commandName === 'submit') {
+      const url = interaction.options.getString('url');
+      const image = interaction.options.getAttachment('image');
+      
+      if (socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID && 
+          interaction.channel.id !== socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID) {
+        const channelId = socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID;
+        return await interaction.reply({
+          content: `Please use the /submit command in <#${channelId}>`,
+          ephemeral: true
+        });
+      }
+      
+      const discordId = interaction.user.id;
+      const { canSubmit, currentCount } = await socialArmy.checkDailySubmissionLimit(discordId);
+      
+      if (!canSubmit) {
+        return await interaction.reply({
+          content: `You've reached your daily submission limit (${socialArmy.socialConfig.DAILY_SUBMISSION_LIMIT} submissions per day). Try again tomorrow!`,
+          ephemeral: true
+        });
+      }
+      
+      if (!url && !image) {
+        return await interaction.reply({
+          content: "Please provide either a URL or attach an image with your submission.",
+          ephemeral: true
+        });
+      }
+      
+      const submissionUrl = url || (image ? image.url : null);
+      
+      await interaction.deferReply();
+      
+      const hasImage = image && image.contentType?.startsWith('image/');
+      const imageUrl = hasImage ? image.url : null;
+      
+      const embed = socialArmy.createSubmissionEmbed(
+        interaction.user,
+        submissionUrl,
+        currentCount,
+        hasImage,
+        imageUrl
+      );
+      
+      const submissionMessage = await interaction.followUp({ embeds: [embed] });
+      
+      for (const emoji of Object.keys(socialArmy.socialConfig.EMOJI_POINTS)) {
+        try {
+          await submissionMessage.react(emoji);
+        } catch (e) {
+          console.log(`Failed to add emoji ${emoji}:`, e.message);
+        }
+      }
+      
+      await socialArmy.createSubmission(discordId, submissionMessage.id, submissionUrl);
+      console.log(`Submission created for ${interaction.user.username} - Message ID: ${submissionMessage.id}`);
+      
+    } else if (commandName === 'rankings') {
+      await interaction.deferReply();
+      
+      const topUsers = await socialArmy.getLeaderboard(interaction.guild, socialArmy.socialConfig.LEADERBOARD_SIZE);
+      
+      for (const user of topUsers) {
+        try {
+          const member = await interaction.guild.members.fetch(user.discord_id);
+          user.discord_username = member.user.username;
+        } catch (e) {}
+      }
+      
+      const embed = socialArmy.createRankingsEmbed(topUsers, interaction.guild);
+      await interaction.followUp({ embeds: [embed] });
+      
+    } else if (commandName === 'social-stats') {
+      await interaction.deferReply();
+      
+      const targetUser = interaction.options.getUser('user') || interaction.user;
+      const stats = await socialArmy.getUserStats(targetUser.id, interaction.guild);
+      const embed = socialArmy.createStatsEmbed(targetUser, stats);
+      
+      await interaction.followUp({ embeds: [embed] });
+      
+    } else if (commandName === 'social-config') {
+      await interaction.deferReply({ ephemeral: true });
+      
+      const channelId = socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID;
+      const channel = channelId ? client.channels.cache.get(channelId) : null;
+      const channelName = channel ? `#${channel.name}` : (channelId ? `ID: ${channelId}` : 'Not configured');
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Social Army Configuration')
+        .setColor(0x3498DB)
+        .addFields(
+          { name: 'Social Army Channel', value: channelName, inline: false },
+          { name: 'Judge Role', value: socialArmy.socialConfig.SOCIAL_ARMY_JUDGE_ROLE_NAME, inline: true },
+          { name: 'Elite Role', value: socialArmy.socialConfig.SOCIAL_ARMY_ELITE_ROLE_NAME, inline: true },
+          { name: 'Leaderboard Size', value: String(socialArmy.socialConfig.LEADERBOARD_SIZE), inline: true },
+          { name: 'Effort', value: '✍️ (1pt), 🎨 (3pt), 🎬 (5pt), 🎞️ (8pt)', inline: false },
+          { name: 'Creativity', value: '💡 (2pt), 🤯 (4pt)', inline: false },
+          { name: 'Reach', value: '📊 (2pt), 🔥 (4pt), 🚀 (8pt)', inline: false },
+          { name: 'Consistency', value: '🧡 (2pt), 💪 (3pt)', inline: false },
+          { name: 'Bonus', value: '🏅 (5pt), 👑 (10pt - Owner only)', inline: false }
+        );
+      
+      await interaction.followUp({ embeds: [embed], ephemeral: true });
+      
+    } else if (commandName === 'social-reset') {
+      if (!socialArmy.isAdmin(interaction.member)) {
+        return await interaction.reply({
+          content: "You don't have permission to use this command!",
+          ephemeral: true
+        });
+      }
+      
+      await interaction.deferReply();
+      
+      const monthKey = socialArmy.socialConfig.getCurrentMonthKey();
+      const monthName = socialArmy.socialConfig.getMonthName();
+      
+      const topUsers = await socialArmy.resetMonthlyScores();
+      
+      let winnersAnnounced = false;
+      if (topUsers && topUsers.length > 0) {
+        const medals = ['🥇', '🥈', '🥉'];
+        const embed = new EmbedBuilder()
+          .setTitle(`🎉 ${monthName} Winners!`)
+          .setDescription('Congratulations to our top Social Army contributors!')
+          .setColor(0xFFD700);
+        
+        for (let idx = 0; idx < Math.min(topUsers.length, 3); idx++) {
+          const user = topUsers[idx];
+          let username = user.discord_username;
+          try {
+            const member = await interaction.guild.members.fetch(user.discord_id);
+            username = member.displayName;
+          } catch (e) {}
+          
+          embed.addFields({
+            name: `${medals[idx]} ${username}`,
+            value: `**${user.points}** points`,
+            inline: false
+          });
+        }
+        
+        const channelId = socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID;
+        if (channelId) {
+          const channel = client.channels.cache.get(channelId);
+          if (channel) {
+            await channel.send({ embeds: [embed] });
+            winnersAnnounced = true;
+          }
+        }
+      }
+      
+      const db = require('./db.config.js');
+      const scoreCount = await db.SocialScore.destroy({ where: { month_key: monthKey } });
+      const messageScoreCount = await db.SocialMessageScore.destroy({ where: { month_key: monthKey } });
+      
+      let message = `Monthly reset complete! `;
+      if (winnersAnnounced) {
+        message += `Winners announced in <#${socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID}>. `;
+      }
+      message += `Deleted ${scoreCount} user scores and ${messageScoreCount} message scores.`;
+      
+      await interaction.followUp(message);
+      
+    } else if (commandName === 'social-export') {
+      if (!socialArmy.isAdmin(interaction.member)) {
+        return await interaction.reply({
+          content: "You don't have permission to use this command!",
+          ephemeral: true
+        });
+      }
+      
+      await interaction.deferReply({ ephemeral: true });
+      
+      const limit = interaction.options.getInteger('limit') || 10;
+      const topUsers = await socialArmy.getLeaderboard(interaction.guild, limit);
+      
+      if (!topUsers || topUsers.length === 0) {
+        return await interaction.followUp({ content: 'No scores to export!', ephemeral: true });
+      }
+      
+      const monthName = socialArmy.socialConfig.getMonthName();
+      let exportText = `Social Army Leaderboard Export - ${monthName}\n`;
+      exportText += '='.repeat(50) + '\n\n';
+      
+      for (let idx = 0; idx < topUsers.length; idx++) {
+        const user = topUsers[idx];
+        let username = user.discord_username;
+        try {
+          const member = await interaction.guild.members.fetch(user.discord_id);
+          username = member.displayName;
+        } catch (e) {}
+        
+        exportText += `${idx + 1}. ${username} - ${user.points} points\n`;
+      }
+      
+      const { AttachmentBuilder } = require('discord.js');
+      const buffer = Buffer.from(exportText, 'utf-8');
+      const attachment = new AttachmentBuilder(buffer, { name: 'social_army_export.txt' });
+      
+      await interaction.followUp({ content: 'Export complete!', files: [attachment], ephemeral: true });
+    }
+    
+  } catch (error) {
+    console.error('Slash command error:', error);
+    const replyMethod = interaction.deferred || interaction.replied ? 'followUp' : 'reply';
+    await interaction[replyMethod]({ 
+      content: `An error occurred: ${error.message}`, 
+      ephemeral: true 
+    }).catch(() => {});
+  }
 });
 
 tools.db.sequelize.sync({ alter: true }).then(() => {

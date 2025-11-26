@@ -319,18 +319,24 @@ async function getUserStats(discordId, guild) {
     rank = higherCount + 1;
   }
   
-  const reactionCount = await SocialMessageScore.count({
+  const messageScores = await SocialMessageScore.findAll({
     where: {
       author_id: discordId,
       month_key: monthKey
     }
   });
   
+  const emojiBreakdown = {};
+  for (const score of messageScores) {
+    emojiBreakdown[score.emoji] = (emojiBreakdown[score.emoji] || 0) + score.points;
+  }
+  
   return {
     points: userScore?.points || 0,
     rank: rank,
     totalParticipants: totalScores,
-    reactionsReceived: reactionCount
+    reactionsReceived: messageScores.length,
+    emojiBreakdown: emojiBreakdown
   };
 }
 
@@ -386,14 +392,23 @@ function createStatsEmbed(user, stats) {
   const monthName = socialConfig.getMonthName();
   
   const embed = new EmbedBuilder()
-    .setTitle(`📊 Social Army Stats - ${user.username}`)
+    .setTitle(`📊 Stats for ${user.displayName || user.username}`)
+    .setDescription(`Month: ${monthName}`)
     .setColor(0x3498DB)
     .addFields(
-      { name: "Month", value: monthName, inline: true },
-      { name: "Points", value: stats.points.toString(), inline: true },
-      { name: "Rank", value: stats.rank ? `#${stats.rank} of ${stats.totalParticipants}` : "Not ranked", inline: true },
-      { name: "Reactions Received", value: stats.reactionsReceived.toString(), inline: true }
+      { name: "Total Points", value: `**${stats.points}**`, inline: true },
+      { name: "Rank", value: stats.rank ? `**#${stats.rank}**` : "Not ranked", inline: true },
+      { name: "Reactions Received", value: `**${stats.reactionsReceived}**`, inline: true }
     );
+  
+  if (stats.emojiBreakdown && Object.keys(stats.emojiBreakdown).length > 0) {
+    const sortedEmojis = Object.entries(stats.emojiBreakdown)
+      .sort((a, b) => b[1] - a[1]);
+    const breakdownText = sortedEmojis
+      .map(([emoji, pts]) => `${emoji}: ${pts} pts`)
+      .join('\n');
+    embed.addFields({ name: "Points by Category", value: breakdownText, inline: false });
+  }
   
   return embed;
 }
