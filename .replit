@@ -32,3 +32,8 @@ waitForPort = 8000
 [[ports]]
 localPort = 8000
 externalPort = 8000
+
+[userenv]
+
+[userenv.shared]
+SOCIAL_ARMY_CHANNEL_ID = "1433476287095246970"
