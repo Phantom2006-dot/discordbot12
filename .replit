@@ -32,3 +32,7 @@ waitForPort = 8000
 [[ports]]
 localPort = 8000
 externalPort = 8000
+
+[[ports]]
+localPort = 33701
+externalPort = 80
