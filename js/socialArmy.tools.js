@@ -55,8 +55,11 @@ async function handleReactionAdd(reaction, user, client) {
   try {
     if (user.bot) return;
     
-    if (!socialConfig.SOCIAL_ARMY_CHANNEL_ID || 
-        reaction.message.channel.id !== socialConfig.SOCIAL_ARMY_CHANNEL_ID) {
+    const configChannelId = String(socialConfig.SOCIAL_ARMY_CHANNEL_ID);
+    const messageChannelId = String(reaction.message.channel.id);
+    
+    if (!configChannelId || configChannelId === "" || 
+        messageChannelId !== configChannelId) {
       return;
     }
     
@@ -156,8 +159,11 @@ async function handleReactionRemove(reaction, user) {
   try {
     if (user.bot) return;
     
-    if (!socialConfig.SOCIAL_ARMY_CHANNEL_ID || 
-        reaction.message.channel.id !== socialConfig.SOCIAL_ARMY_CHANNEL_ID) {
+    const configChannelId = String(socialConfig.SOCIAL_ARMY_CHANNEL_ID);
+    const messageChannelId = String(reaction.message.channel.id);
+    
+    if (!configChannelId || configChannelId === "" || 
+        messageChannelId !== configChannelId) {
       return;
     }
     
@@ -217,8 +223,11 @@ async function handleReactionRemove(reaction, user) {
 
 async function handleMessageDelete(message) {
   try {
-    if (!socialConfig.SOCIAL_ARMY_CHANNEL_ID || 
-        message.channel.id !== socialConfig.SOCIAL_ARMY_CHANNEL_ID) {
+    const configChannelId = String(socialConfig.SOCIAL_ARMY_CHANNEL_ID);
+    const messageChannelId = String(message.channel.id);
+    
+    if (!configChannelId || configChannelId === "" || 
+        messageChannelId !== configChannelId) {
       return;
     }
     

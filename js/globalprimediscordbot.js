@@ -982,9 +982,12 @@ client.on("interactionCreate", async (interaction) => {
       const url = interaction.options.getString('url');
       const image = interaction.options.getAttachment('image');
       
-      if (socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID && 
-          interaction.channel.id !== socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID) {
-        const channelId = socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID;
+      const configChannelId = String(socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID);
+      const interactionChannelId = String(interaction.channel.id);
+      
+      if (configChannelId && configChannelId !== "" && 
+          interactionChannelId !== configChannelId) {
+        const channelId = configChannelId;
         return await interaction.reply({
           content: `Please use the /submit command in <#${channelId}>`,
           ephemeral: true
@@ -1031,6 +1034,10 @@ client.on("interactionCreate", async (interaction) => {
         } catch (e) {
           console.log(`Failed to add emoji ${emoji}:`, e.message);
         }
+      }
+      
+      if (url) {
+        await interaction.channel.send(url);
       }
       
       await socialArmy.createSubmission(discordId, submissionMessage.id, submissionUrl);
