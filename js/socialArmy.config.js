@@ -42,5 +42,19 @@ module.exports = {
   getMonthName: function() {
     const now = new Date();
     return now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  },
+
+  getPreviousMonthKey: function() {
+    const now = new Date();
+    now.setUTCMonth(now.getUTCMonth() - 1);
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  },
+
+  getPreviousMonthName: function() {
+    const now = new Date();
+    now.setUTCMonth(now.getUTCMonth() - 1);
+    return now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
   }
 };

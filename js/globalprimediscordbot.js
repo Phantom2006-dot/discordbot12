@@ -1094,16 +1094,38 @@ client.on("interactionCreate", async (interaction) => {
       
       await interaction.deferReply();
       
-      const monthKey = socialArmy.socialConfig.getCurrentMonthKey();
-      const monthName = socialArmy.socialConfig.getMonthName();
+      const db = require('./db.config.js');
       
-      const topUsers = await socialArmy.resetMonthlyScores();
+      const currentMonthKey = socialArmy.socialConfig.getCurrentMonthKey();
+      const previousMonthKey = socialArmy.socialConfig.getPreviousMonthKey();
+      
+      const currentMonthCount = await db.SocialScore.count({ where: { month_key: currentMonthKey } });
+      const previousMonthCount = await db.SocialScore.count({ where: { month_key: previousMonthKey } });
+      
+      let targetMonthKey;
+      let targetMonthName;
+      
+      if (currentMonthCount > 0) {
+        targetMonthKey = currentMonthKey;
+        targetMonthName = socialArmy.socialConfig.getMonthName();
+      } else if (previousMonthCount > 0) {
+        targetMonthKey = previousMonthKey;
+        targetMonthName = socialArmy.socialConfig.getPreviousMonthName();
+      } else {
+        return await interaction.followUp("No scores found to reset for current or previous month.");
+      }
+      
+      const topUsers = await db.SocialScore.findAll({
+        where: { month_key: targetMonthKey },
+        order: [['points', 'DESC']],
+        limit: socialArmy.socialConfig.LEADERBOARD_SIZE
+      });
       
       let winnersAnnounced = false;
       if (topUsers && topUsers.length > 0) {
         const medals = ['🥇', '🥈', '🥉'];
         const embed = new EmbedBuilder()
-          .setTitle(`🎉 ${monthName} Winners!`)
+          .setTitle(`🎉 ${targetMonthName} Winners!`)
           .setDescription('Congratulations to our top Social Army contributors!')
           .setColor(0xFFD700);
         
@@ -1132,15 +1154,20 @@ client.on("interactionCreate", async (interaction) => {
         }
       }
       
-      const db = require('./db.config.js');
-      const scoreCount = await db.SocialScore.destroy({ where: { month_key: monthKey } });
-      const messageScoreCount = await db.SocialMessageScore.destroy({ where: { month_key: monthKey } });
+      const { Op } = require('sequelize');
+      const scoreCount = await db.SocialScore.destroy({ where: { month_key: targetMonthKey } });
+      const messageScoreCount = await db.SocialMessageScore.destroy({ where: { month_key: targetMonthKey } });
+      const submissionCount = await db.SocialSubmission.destroy({ 
+        where: { 
+          date_key: { [Op.like]: `${targetMonthKey}%` } 
+        } 
+      });
       
-      let message = `Monthly reset complete! `;
+      let message = `Monthly reset complete for ${targetMonthName}! `;
       if (winnersAnnounced) {
         message += `Winners announced in <#${socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID}>. `;
       }
-      message += `Deleted ${scoreCount} user scores and ${messageScoreCount} message scores.`;
+      message += `Deleted ${scoreCount} user scores, ${messageScoreCount} message scores, and ${submissionCount} submissions.`;
       
       await interaction.followUp(message);
       

@@ -42,12 +42,13 @@ This is a Discord bot for the Global Prime/Afterprime trading community. It mana
 
 ## Social Army Feature
 
-### Commands
-- `!submit <url>` - Submit content for judging (or attach image)
-- `!rankings` / `!leaderboard` - View monthly leaderboard
-- `!socialstats [@user]` - View stats for yourself or another user
-- `!socialconfig` - View Social Army configuration (admin only)
-- `!socialreset` - Reset monthly scores and announce winners (admin only)
+### Slash Commands
+- `/submit url:<url> image:<attachment>` - Submit content for judging (provide URL or attach image)
+- `/rankings` - View monthly leaderboard
+- `/social-stats user:<@user>` - View stats for yourself or another user (optional user parameter)
+- `/social-config` - View Social Army configuration (ephemeral, any user)
+- `/social-reset` - Reset monthly scores and announce winners (admin only)
+- `/social-export limit:<number>` - Export leaderboard data as text file (admin only)
 
 ### Emoji Point System
 | Category | Emoji | Points |
