@@ -103,6 +103,72 @@ const slashCommands = [
         .setRequired(false))
 ];
 
+async function postScheduledLeaderboard(isDaily = false) {
+  try {
+    const channelId = socialArmy.socialConfig.SOCIAL_ARMY_CHANNEL_ID;
+    if (!channelId) {
+      console.log('No Social Army channel configured for scheduled leaderboard');
+      return;
+    }
+    
+    const channel = await client.channels.fetch(String(channelId)).catch(() => null);
+    if (!channel) {
+      console.log('Could not find Social Army channel for scheduled leaderboard');
+      return;
+    }
+    
+    const topUsers = await socialArmy.getLeaderboard(channel.guild, socialArmy.socialConfig.LEADERBOARD_SIZE);
+    
+    for (const user of topUsers) {
+      try {
+        const member = await channel.guild.members.fetch(user.discord_id);
+        user.discord_username = member.user.username;
+      } catch (e) {}
+    }
+    
+    const embed = socialArmy.createRankingsEmbed(topUsers, channel.guild);
+    
+    const now = new Date();
+    const timeStr = now.toUTCString();
+    const scheduleType = isDaily ? "Daily Update" : "4-Hour Update";
+    embed.setFooter({ text: `${scheduleType} | ${timeStr}` });
+    
+    await channel.send({ embeds: [embed] });
+    console.log(`Posted scheduled leaderboard (${scheduleType}) at ${timeStr}`);
+    
+  } catch (error) {
+    console.error('Error posting scheduled leaderboard:', error);
+  }
+}
+
+let lastDailyPostDate = null;
+
+function startLeaderboardScheduler() {
+  const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+  
+  setInterval(() => {
+    postScheduledLeaderboard(false);
+  }, FOUR_HOURS_MS);
+  
+  const checkDailyPost = () => {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    const todayKey = now.toISOString().split('T')[0];
+    
+    if (utcHour === 0 && utcMinute < 10 && lastDailyPostDate !== todayKey) {
+      lastDailyPostDate = todayKey;
+      postScheduledLeaderboard(true);
+    }
+  };
+  
+  checkDailyPost();
+  
+  setInterval(checkDailyPost, 5 * 60 * 1000);
+  
+  console.log('Leaderboard scheduler started: Daily at 00:00 UTC + Every 4 hours');
+}
+
 client.once("ready", async () => {
   tools.Log(`${client.user.username} Ready!`);
   client.user.setActivity("blend in with the humans");
@@ -120,6 +186,13 @@ client.once("ready", async () => {
   } catch (error) {
     console.error('Error registering slash commands:', error);
   }
+  
+  startLeaderboardScheduler();
+  
+  setTimeout(() => {
+    console.log('Posting initial leaderboard to start 4-hour cycle...');
+    postScheduledLeaderboard(false);
+  }, 5000);
 });
 
 client.on("messageCreate", async (message) => {

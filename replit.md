@@ -68,12 +68,23 @@ This is a Discord bot for the Global Prime/Afterprime trading community. It mana
 | Bonus (Owner Only) | 👑 | 10 |
 
 ### How It Works
-1. Users submit content in the Social Army channel using `!submit`
+1. Users submit content in the Social Army channel using `!submit` or `/submit`
 2. Judges (with "Social Army Judge" role) react with scoring emojis
 3. Points are tracked automatically per user per month
 4. Monthly leaderboard shows top contributors
+5. Each month starts fresh - previous month data is saved but new month gets clean slate
+
+### Automatic Leaderboard Posts
+The bot automatically posts the leaderboard to the Social Army channel:
+- **Daily**: Once at 00:00 UTC (start of day)
+- **Every 4 Hours**: Regular updates throughout the day
+- Posts show "Daily Update" or "4-Hour Update" in the footer with timestamp
 
 ## Recent Changes
+- **2024-11-27**: Added scheduled leaderboard posting (daily + every 4 hours)
+- **2024-11-27**: Fixed channel ID comparison for reaction scoring
+- **2024-11-27**: Added URL as separate message after submission embed
+- **2024-11-27**: Cleaned up unused attached_assets folder
 - **2024-11-26**: Added Social Army reaction-based scoring system
 - **2024-11-26**: Initial Replit import and setup
 
